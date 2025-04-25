@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multilingual Chatbot Interface with Audio Support</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f4f4f9;
+    }
+    #chat-container {
+      width: 80%;
+      max-width: 600px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+    #chat-box {
+      height: 400px;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      border-bottom: 1px solid #ddd;
+    }
+    .user-message, .bot-message {
+      padding: 10px;
+      border-radius: 8px;
+      max-width: 80%;
+    }
+    .user-message {
+      align-self: flex-end;
+      background-color: #007bff;
+      color: #fff;
+    }
+    .bot-message {
+      align-self: flex-start;
+      background-color: #e9ecef;
+      color: #333;
+    }
+    #input-container {
+      display: flex;
+      padding: 10px;
+      align-items: center;
+    }
+    #text-input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      outline: none;
+    }
+    #send-btn, #audio-btn {
+      margin-left: 10px;
+      padding: 10px;
+      border: none;
+      background-color: #007bff;
+      color: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #send-btn:hover, #audio-btn:hover {
+      background-color: #0056b3;
+    }
+    #language-select {
+      margin-right: 10px;
+      padding: 10px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="chat-container">
+  <div id="chat-box"></div>
+  <div id="input-container">
+    <select id="language-select">
+      <option value="en-US">English</option>
+      <option value="hi-IN">Hindi</option>
+      <option value="te-IN">Telugu</option>
+      <option value="mr-IN">Marathi</option>
+    </select>
+    <input type="text" id="text-input" placeholder="Type a message">
+    <button id="audio-btn">🎤</button>
+    <button id="send-btn">Send</button>
+  </div>
+</div>
+
+<script>
+  const chatBox = document.getElementById('chat-box');
+  const textInput = document.getElementById('text-input');
+  const sendBtn = document.getElementById('send-btn');
+  const audioBtn = document.getElementById('audio-btn');
+  const languageSelect = document.getElementById('language-select');
+
+  const API_URL = 'http://127.0.0.1:8000/ask_query';
+
+  async function sendMessage(text) {
+    const selectedLang = languageSelect.value;
+    displayMessage(text, 'user');
+
+    const query = {
+      query: text,
+      college_name: 'SampleCollege',
+      lang: selectedLang
+    };
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(query)
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const messages = chunk.split('\n\n').map(line => line.slice(6)).filter(line => line);
+        
+        messages.forEach(message => {
+          if (message !== '[DONE]') displayMessage(message, 'bot');
+        });
+      }
+    } catch (error) {
+      displayMessage("Error: Could not reach the server.", 'bot');
+    }
+  }
+
+  function displayMessage(text, sender) {
+    const messageElement = document.createElement('div');
+    messageElement.classList.add(sender === 'user' ? 'user-message' : 'bot-message');
+    messageElement.innerText = text;
+    chatBox.appendChild(messageElement);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  sendBtn.addEventListener('click', () => {
+    const message = textInput.value;
+    if (message) {
+      sendMessage(message);
+      textInput.value = '';
+    }
+  });
+
+  // Web Speech API for audio input
+  let recognition;
+  try {
+    if (!window.webkitSpeechRecognition) throw new Error("Speech Recognition not supported");
+
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      audioBtn.style.backgroundColor = '#dc3545';  // Red to indicate recording
+      textInput.placeholder = "Listening...";
+    };
+
+    recognition.onresult = (event) => {
+      const speechResult = event.results[0][0].transcript;
+      textInput.value = speechResult;  // Display detected text in the input box
+      textInput.placeholder = "Type a message";
+    };
+
+    recognition.onend = () => {
+      audioBtn.style.backgroundColor = '';  // Reset color after recording
+      textInput.placeholder = "Type a message";
+    };
+
+    recognition.onerror = (event) => {
+      alert(`Speech recognition error: ${event.error}`);
+      audioBtn.style.backgroundColor = '';
+      textInput.placeholder = "Type a message";
+    };
+  } catch (error) {
+    alert("Your browser does not support Speech Recognition. Please try using Chrome.");
+  }
+
+  audioBtn.addEventListener('click', () => {
+    if (recognition) {
+      recognition.lang = languageSelect.value;  // Set recognition language based on selected language
+      recognition.start();
+    } else {
+      alert('Speech recognition not supported in this browser.');
+    }
+  });
+</script>
+
+</body>
+</html>
